@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "gulp"
   },
-  "author": "Fabian de Rijk <fabian@finalist.com>",
+  "author": "Laurent Falda",
   "license": "GPL",
   "devDependencies": {
     "beepbeep": "^1.2.0",
