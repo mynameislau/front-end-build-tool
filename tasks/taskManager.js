@@ -5,14 +5,14 @@ module.exports = {
       dev: 'dev',
       dist: 'dist',
       src: 'src',
-      registerTask: (taskName, environment = 'development', phase = 'default') => {
+      registerTask: (taskName, environment = 'development', phase = 'build') => {
         taskManager.tasks.push({
           taskName: taskName,
           environment: environment,
           phase: phase
         });
       },
-      getTasks: (environment = 'development', phase = 'default') =>
+      getTasks: (environment = 'development', phase = 'build') =>
         taskManager.tasks.filter(task =>
           task.environment === environment && task.phase === phase
         )

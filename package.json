@@ -3,7 +3,9 @@
   "version": "0.0.1",
   "description": "Build tool",
   "scripts": {
-    "dev": "gulp"
+    "dev": "gulp --dev",
+    "dist": "gulp --dist",
+    "default": "gulp"
   },
   "author": "Laurent Falda",
   "license": "GPL",
@@ -20,9 +22,13 @@
     "gulp-sass": "^2.3.1",
     "gulp-uglify": "^1.5.3",
     "parker": "0.0.10",
+    "eslint": "git+https://github.com/eslint/eslint.git#master",
     "require-from-string": "^1.2.0",
     "stylelint": "^6.5.1",
     "yamljs": "^0.2.7",
     "yargs": "^4.7.1"
+  },
+  "dependencies": {
+    "inquirer": "^1.1.0"
   }
 }

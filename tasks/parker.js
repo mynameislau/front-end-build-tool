@@ -5,11 +5,9 @@ const fs = require('fs');
 
 
 module.exports.register = (taskManager) => {
-  console.log('resgistent parker');
   const dev = taskManager.dev;
 
   gulp.task('parker', cb => {
-    console.log('okkkk');
     fs.readFile(`${dev}/css/main.css`, (err, data) => {
       if (err) {
         console.error(err);

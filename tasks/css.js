@@ -8,21 +8,19 @@ const del = require('del');
 const browserSync = require('browser-sync');
 const cleanCSS = require('gulp-clean-css');
 
-module.exports.register = (taskManager) => {
+module.exports.register = taskManager => {
   const dev = taskManager.dev;
   const dist = taskManager.dist;
   const src = taskManager.src;
 
-  const compileSass = (cb, isDist) => {
+  const glob = [`${src}/scss/*.scss`, `!${src}/scss/_*.scss`];
 
-    console.log(dev);
+  const compileSass = (cb, isDist) => {
     const dest = isDist ? `${dist}/css` : `${dev}/css`;
 
-    del(dest).then(() =>
-    {
-      const glob = [`${src}/scss/*.scss`, `!${src}/scss/_*.scss`];
+    del(dest).then(() => {
 
-      let stream = gulp.src(glob)
+      const stream = gulp.src(glob)
       .pipe(sourcemaps.init())
       .pipe(sass({ outputStyle: 'expanded' }))
       .on('error', error => {
@@ -30,15 +28,10 @@ module.exports.register = (taskManager) => {
         beep(4);
       });
 
-      if (isDist) {
-        stream = stream.pipe(cleanCSS())
-        .pipe(sourcemaps.write('./'));
-      }
-      else {
-        stream = stream.pipe(sourcemaps.write('./'));
-      }
+      const cleaned = isDist ? stream.pipe(cleanCSS()) : stream;
 
-      stream.pipe(gulp.dest(dest))
+      cleaned.pipe(sourcemaps.write('./'))
+      .pipe(gulp.dest(dest))
       .on('end', cb)
       .pipe(browserSync.get(isDist ? 'dist' : 'dev').stream({ match: '**/*.css' }));
     }).catch(error => console.error('compile sass error: ', error));
@@ -52,7 +45,7 @@ module.exports.register = (taskManager) => {
     compileSass(cb);
   });
 
-  gulp.task('css', gulp.parallel('compileSass', function watchCSS(cb) {
+  gulp.task('css', gulp.parallel('compileSass', cb => {
     cb();
     gulp.watch([`${src}/scss/**/*.scss`], gulp.series('compileSass'));
   }));
