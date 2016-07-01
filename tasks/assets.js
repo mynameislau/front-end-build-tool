@@ -6,22 +6,23 @@ const browserSync = require('browser-sync');
 // const vinylPaths = require('vinyl-paths');
 // const changed = require('gulp-changed');
 
-const dirs = ['assets'];
+const dirs = ['assets', 'fonts', 'img'];
 
-module.exports.register = taskManager => {
+
+module.exports.register = (taskManager) => {
   const dev = taskManager.dev;
   const dist = taskManager.dist;
   const src = taskManager.src;
 
-  function copyAssets(isDist) {
+  const copyAssets = isDist => {
     return new Promise((resolveCopy, rejectCopy) => {
-      const dir = isDist ? dist : dev;
-      del(dirs.map(item => `${dir}/${item}/*`)).then(() =>
-      {
+      const dest = isDist ? dist : dev;
+
+      del(dirs.map(directory => `${dest}/${directory}/*`)).then(() => {
         Promise.all(
-          dirs.map(item => new Promise((resolve, reject) => {
-            gulp.src(`${src}/${item}/**/*.*`)
-            .pipe(gulp.dest(`${dir}/${item}`))
+          dirs.map(directory => new Promise((resolve, reject) => {
+            gulp.src(`${src}/${directory}/**/*.*`)
+            .pipe(gulp.dest(`${dest}/${directory}`))
             .on('error', error => reject(error))
             .on('end', () => {
               resolve();
@@ -36,17 +37,18 @@ module.exports.register = taskManager => {
         rejectCopy(reason);
       });
     });
-  }
+  };
 
   // copying assets
   gulp.task('copyAssets', () => copyAssets());
   gulp.task('copyAssetsDist', () => copyAssets(true));
 
-  gulp.task('assets', gulp.parallel('copyAssets', function watchAssets(cb) {
+  gulp.task('assets', gulp.parallel('copyAssets', cb => {
     cb();
-    gulp.watch(dirs.map(item => `${src}/${item}/**/*.*`), function watchCopyAssets() { return copyAssets(); });
+    gulp.watch(dirs.map(item => `${src}/${item}/**/*.*`), gulp.series('copyAssets'));
   }));
 
   taskManager.registerTask('assets', 'development');
   taskManager.registerTask('copyAssetsDist', 'production');
 };
+
