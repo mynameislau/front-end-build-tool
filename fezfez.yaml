@@ -31,6 +31,8 @@ rules:
   operator-linebreak: [2, before]
   max-statements: [1, { max: 12 }]
   brace-style: [2, stroustrup, { allowSingleLine: true }]
+  operator-linebreak: [2, before, { overrides: { ?: after } }]
+  dot-location: [2, property]
 
 
   #project specific

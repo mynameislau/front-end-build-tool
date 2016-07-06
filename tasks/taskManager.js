@@ -1,3 +1,5 @@
+const EventEmitter = require('events');
+
 module.exports = {
   init: () => {
     const taskManager = Object.create({
@@ -5,6 +7,7 @@ module.exports = {
       dev: 'dev',
       dist: 'dist',
       src: 'src',
+      emitter: new EventEmitter(),
       registerTask: (taskName, environment = 'development', phase = 'build') => {
         taskManager.tasks.push({
           taskName: taskName,

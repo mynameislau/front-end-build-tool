@@ -9,80 +9,76 @@ const del = require('del');
 const concat = require('gulp-concat');
 const uglify = require('gulp-uglify');
 const YAML = require('yamljs');
-// const Events = require('events');
+// const EventEmitter = require('events');
 
 const jsSourceOrderPath = 'src/data/javascript_source_order.yaml';
 let sourceOrder = null;
 
-module.exports.register = taskManager => {
-  const dev = taskManager.dev;
-  const dist = taskManager.dist;
-  const src = taskManager.src;
-  // const emitter = new Events();
+// const defaultObj = {
+//   sourceOrderPath: () => jsSourceOrderPath,
+//   getSourceOrder: () => sourceOrder,
+//   emitter: new EventEmitter()
+// };
 
-  const isExternal = entry =>
-    entry.src.startsWith('http://') || entry.src.startsWith('https://') || entry.src.startsWith('//');
+const getObjectEntries = obj =>
+  Object.keys(obj).map(key =>
+    [key, obj[key]]
+  );
 
-  const isBundlable = entry =>
-    !isExternal(entry) && !entry.async && !entry.ie;
+const getObjectValues = obj =>
+  Object.keys(obj).map(key =>
+    obj[key]
+  );
 
-  const copyJSFiles = isDist => new Promise((resolve, reject) =>
-  {
-    const dir = isDist ? 'dist' : 'dev';
+const isExternal = entry =>
+  entry.src.startsWith('http://')
+  || entry.src.startsWith('https://')
+  || entry.src.startsWith('//');
+
+const isBundlable = entry =>
+  !isExternal(entry) && !entry.async && !entry.ie;
+
+const init = ({ dev = 'dev', src = 'src', dist = 'dist', emitter = null }) => {
+  const copyJSFiles = isDist => new Promise(resolveCopy => {
+    const dir = isDist ? dist : dev;
 
     del(`${dir}/js/*`).then(() => {
-      //all entries
-      const entries = [];
+      const allEntries = [].concat(...getObjectValues(sourceOrder));
+      const localEntries = allEntries.filter(entry => !isExternal(entry));
 
-      for (var name in sourceOrder) { entries.push(...sourceOrder[name]); }
-
-      const localEntries = entries.filter(entry => !isExternal(entry));
-
-      //copying local entries
+      // copying local entries
       Promise.all(localEntries.map(entry => new Promise((resolve, reject) => {
-        let stream;
-        let dest;
+        const gulpSRC = entry.bundle ?
+          entry.bundle.map(bundlePart => `${src}/${bundlePart.src}`)
+          : `${src}/${entry.src}`;
+        const dest = entry.bundle ? dir : path.dirname(`${dir}/${entry.src}`);
 
-        if (entry.bundle)
-        {
-          const gulpSRC = entry.bundle.map(entry => `src/${entry.src}`);
-          stream = gulp.src(gulpSRC)
-          .pipe(sourcemaps.init())
-          .pipe(concat(entry.src));
-          dest = dir;
-        }
-        else
-        {
-          stream = gulp.src(`src/${entry.src}`)
-          .pipe(sourcemaps.init())
-          .on('error', error => console.error(error));
-          dest = path.dirname(`${dir}/${entry.src}`);
-        }
+        const stream = gulp.src(gulpSRC)
+        .pipe(sourcemaps.init())
+        .on('error', error => console.error(error));
 
-        if (dist) { stream = stream.pipe(uglify()); }
+        const concatenated = entry.bundle ? stream.pipe(concat(entry.src)) : stream;
+        const uglified = dist ? concatenated.pipe(uglify()) : concatenated;
 
-        stream.pipe(sourcemaps.write('./'))
+        uglified.pipe(sourcemaps.write('./'))
         .pipe(gulp.dest(dest))
         .on('end', resolve)
+        .pipe(browserSync.get(isDist ? 'dist' : 'dev').stream({ match: '**/*.js' }))
         .on('error', error => {
           console.error(error);
           reject(error);
         });
-      }))).then(resolve);
-    }).catch(error => console.error(error));
+      }))).then(resolveCopy);
+    })
+    .catch(error => console.error(error));
   });
 
-  const getEntries = obj =>
-    Object.keys(obj).map(key =>
-      [key, obj[key]]
-    );
+  const getSourceOrder = config => {
+    const source = {};
 
-  const getSourceOrder = parsed => {
-    const src = {};
-
-    getEntries(parsed).forEach(([groupName, groupEntries]) => {
-      src[groupName] = [];
-      const srcGroup = src[groupName];
+    getObjectEntries(config).forEach(([groupName, groupEntries]) => {
+      source[groupName] = [];
+      const srcGroup = source[groupName];
       let bundleNumber = 0;
       let currentlyBundling = false;
 
@@ -106,7 +102,7 @@ module.exports.register = taskManager => {
       });
     });
 
-    return src;
+    return source;
   };
 
   const createJSFilesArray = () => new Promise((resolve, reject) => {
@@ -126,38 +122,77 @@ module.exports.register = taskManager => {
     });
   });
 
-  gulp.task('createJSFilesArray', createJSFilesArray);
+  createJSFilesArray.displayName = 'createJSFilesArray';
 
-  gulp.task('copyJSFilesDist', () => copyJSFiles(true));
-
-  gulp.task('compileJSDist', gulp.series('createJSFilesArray', 'copyJSFilesDist'));
-
-  gulp.task('copyJSFiles', () => copyJSFiles());
-
-  gulp.task('copyJSFilesAndReload', cb => {
+  const rebuildJS = gulp.series(createJSFilesArray, cb => {
     copyJSFiles().then(() => {
-      // emitter.emit('JSFilesCopied');
-      browserSync.get('dev').reload();
+      if (emitter) { emitter.emit('JSRebuilt', sourceOrder); }
 
       return cb();
     });
   });
 
-  gulp.task('rebuildJS', gulp.series('createJSFilesArray', cb => {
-    copyJSFiles().then(() => {
-      cb();
-      // emitter.emit('JSRebuilt');
-    });
+  rebuildJS.displayName = 'rebuildJS';
+
+  gulp.task('javascript', gulp.series(rebuildJS, () => {
+    gulp.watch(jsSourceOrderPath, rebuildJS);
+    gulp.watch(`${src}/js/**/*.*`, () => copyJSFiles());
   }));
 
-  gulp.task('javascript', gulp.series('rebuildJS', () => {
-    gulp.watch(jsSourceOrderPath, gulp.series('rebuildJS'));
-    gulp.watch('src/js/**/*.*', gulp.series('copyJSFiles'));
-  }));
+  gulp.task('compileJSDist', gulp.series(createJSFilesArray, () => copyJSFiles(true)));
+};
+
+module.exports.register = taskManager => {
+  const dev = taskManager.dev || 'dev';
+  const dist = taskManager.dist || 'dist';
+  const src = taskManager.src || 'src';
+  // const emitter = new Events();
+
+  init({ dev: dev, dist: dist, src: src, emitter: taskManager.emitter });
 
   taskManager.registerTask('javascript', 'development');
   taskManager.registerTask('compileJSDist', 'production');
 };
 
-module.exports.sourceOrderPath = () => jsSourceOrderPath;
-module.exports.getSourceOrder = () => sourceOrder;
+  // todo ??
+  // const reduceToBundleArray = (configGroupEntries, groupName) => {
+  //   let bundleNumber = 0;
+  //   let currentlyBundling = false;
+
+  //   return configGroupEntries.reduce((bundleArray, currentEntry) => {
+  //     if (isBundlable(currentEntry)) {
+  //       // if not yet created, create bundle
+  //       if (!currentlyBundling) {
+  //         currentlyBundling = true;
+  //         bundleNumber += 1;
+  //         bundleArray.push({
+  //           src: `js/bundles/${groupName}-bundle-${bundleNumber}.js`,
+  //           bundle: []
+  //         });
+  //       }
+  //       // add file to bundle
+  //       bundleArray[bundleArray.length - 1].bundle.push(Object.assign({}, currentEntry));
+  //     }
+  //     // if not bundlable
+  //     else
+  //     {
+  //       currentlyBundling = false;
+  //       bundleArray.push(Object.assign({}, currentEntry));
+  //     }
+
+  //     return bundleArray;
+  //   }, []);
+  // };
+
+  // const reduceToBundlesSet = config =>
+  //   getObjectEntries(config).reduce((sourceObject, [groupName, groupEntries]) => {
+  //     const bundleArray = reduceToBundleArray(groupEntries, groupName);
+  //     const newObj = {};
+
+  //     newObj[groupName] = bundleArray;
+
+  //     return Object.assign(sourceObject, newObj);
+  //   }, {});
+
+  // const getSourceOrder = config =>
+  //   reduceToBundlesSet(config);

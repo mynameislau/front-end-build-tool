@@ -98,7 +98,6 @@ const initAutoTasks = basedir => new Promise(resolveAutoTaskInitiated => {
       return cb();
     }));
 
-
     resolveAutoTaskInitiated();
   }).catch(error => console.error(error)));
 }).catch(error => console.error(error));
