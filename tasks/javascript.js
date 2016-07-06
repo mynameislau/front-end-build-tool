@@ -11,38 +11,41 @@ const uglify = require('gulp-uglify');
 const YAML = require('yamljs');
 // const Events = require('events');
 
+const jsSourceOrderPath = 'src/data/javascript_source_order.yaml';
+let sourceOrder = null;
 
-module.exports.register = (taskManager) => {
+module.exports.register = taskManager => {
   const dev = taskManager.dev;
   const dist = taskManager.dist;
   const src = taskManager.src;
-
-  const jsSourceOrderPath = 'src/data/javascript_source_order.yaml';
   // const emitter = new Events();
 
-  let sourceOrder;
+  const isExternal = entry =>
+    entry.src.startsWith('http://') || entry.src.startsWith('https://') || entry.src.startsWith('//');
 
-  const isExternal = entry => entry.src.startsWith('http://') || entry.src.startsWith('https://') || entry.src.startsWith('//');
+  const isBundlable = entry =>
+    !isExternal(entry) && !entry.async && !entry.ie;
 
-  const copyJSFiles = isDist => new Promise((resolveCopy) =>
+  const copyJSFiles = isDist => new Promise((resolve, reject) =>
   {
-    const dir = isDist ? dist : dev;
+    const dir = isDist ? 'dist' : 'dev';
 
     del(`${dir}/js/*`).then(() => {
-      // all entries
+      //all entries
       const entries = [];
-      for (const name in sourceOrder) { entries.push(...sourceOrder[name]); }
+
+      for (var name in sourceOrder) { entries.push(...sourceOrder[name]); }
 
       const localEntries = entries.filter(entry => !isExternal(entry));
 
-      // copying local entries
+      //copying local entries
       Promise.all(localEntries.map(entry => new Promise((resolve, reject) => {
         let stream;
         let dest;
 
         if (entry.bundle)
         {
-          const gulpSRC = entry.bundle.map(currEntry => `${src}/${currEntry.src}`);
+          const gulpSRC = entry.bundle.map(entry => `src/${entry.src}`);
           stream = gulp.src(gulpSRC)
           .pipe(sourcemaps.init())
           .pipe(concat(entry.src));
@@ -50,7 +53,7 @@ module.exports.register = (taskManager) => {
         }
         else
         {
-          stream = gulp.src(`${src}/${entry.src}`)
+          stream = gulp.src(`src/${entry.src}`)
           .pipe(sourcemaps.init())
           .on('error', error => console.error(error));
           dest = path.dirname(`${dir}/${entry.src}`);
@@ -65,91 +68,96 @@ module.exports.register = (taskManager) => {
           console.error(error);
           reject(error);
         });
-      }))).then(resolveCopy);
+      }))).then(resolve);
     }).catch(error => console.error(error));
   });
 
-  const getSourceOrder = data => {
-    const source = {};
-    const parsed = YAML.parse(data);
-    for (const name in parsed)
-    {
-      source[name] = [];
-      const srcGroup = source[name];
+  const getEntries = obj =>
+    Object.keys(obj).map(key =>
+      [key, obj[key]]
+    );
+
+  const getSourceOrder = parsed => {
+    const src = {};
+
+    getEntries(parsed).forEach(([groupName, groupEntries]) => {
+      src[groupName] = [];
+      const srcGroup = src[groupName];
       let bundleNumber = 0;
-      let bundling = false;
-      for (let i = 0, length = parsed[name].length; i < length; i += 1)
-      {
-        const curr = parsed[name][i];
-        // if current file is bundlable
-        if (!isExternal(curr) && !curr.async && !curr.ie) {
+      let currentlyBundling = false;
+
+      groupEntries.forEach(currentEntry => {
+        if (isBundlable(currentEntry)) {
           // if not yet created, create bundle
-          if (!bundling) {
-            bundling = true;
+          if (!currentlyBundling) {
+            currentlyBundling = true;
             bundleNumber += 1;
-            srcGroup.push({ src: `js/bundles/${name}-bundle-${bundleNumber}.js`, bundle: [] });
+            srcGroup.push({ src: `js/bundles/${groupName}-bundle-${bundleNumber}.js`, bundle: [] });
           }
           // add file to bundle
-          srcGroup[srcGroup.length - 1].bundle.push(Object.assign({}, curr));
+          srcGroup[srcGroup.length - 1].bundle.push(Object.assign({}, currentEntry));
         }
         // if not bundlable
         else
         {
-          bundling = false;
-          srcGroup.push(Object.assign({}, curr));
+          currentlyBundling = false;
+          srcGroup.push(Object.assign({}, currentEntry));
         }
-      }
-    }
-    return source;
+      });
+    });
+
+    return src;
   };
 
-  const createJSFilesArray = () => new Promise((resolve, reject) =>
-  {
-    fs.readFile(jsSourceOrderPath, (err, data) =>
-    {
-      if (!err) {
-        try {
-          sourceOrder = getSourceOrder(data.toString());
-          resolve();
-        }
-        catch (error)
-        {
-          reject(error);
-        }
+  const createJSFilesArray = () => new Promise((resolve, reject) => {
+    fs.readFile(jsSourceOrderPath, (err, data) => {
+      if (err) {
+        console.error(err);
       }
-      else
+
+      try {
+        sourceOrder = getSourceOrder(YAML.parse(data.toString()));
+        resolve();
+      }
+      catch (error)
       {
-        reject(err);
+        reject(error);
       }
     });
   });
 
   gulp.task('createJSFilesArray', createJSFilesArray);
 
-  gulp.task('compileJSDist', gulp.series('createJSFilesArray', function copyJSFilesTaskDist() { return copyJSFiles(true); }));
+  gulp.task('copyJSFilesDist', () => copyJSFiles(true));
 
-  const copyJSFilesTask = gulp.task('copyJSFiles', cb =>
-  {
+  gulp.task('compileJSDist', gulp.series('createJSFilesArray', 'copyJSFilesDist'));
+
+  gulp.task('copyJSFiles', () => copyJSFiles());
+
+  gulp.task('copyJSFilesAndReload', cb => {
     copyJSFiles().then(() => {
-      cb();
       // emitter.emit('JSFilesCopied');
       browserSync.get('dev').reload();
+
+      return cb();
     });
   });
 
-  const rebuildJSTask = gulp.task('rebuildJS', gulp.series('createJSFilesArray', function copyJSFilesAfterRebuild(cb) {
+  gulp.task('rebuildJS', gulp.series('createJSFilesArray', cb => {
     copyJSFiles().then(() => {
       cb();
       // emitter.emit('JSRebuilt');
     });
   }));
 
-  gulp.task('javascript', gulp.parallel('rebuildJS', function watchJavascript(cb) {
-    cb();
-    gulp.watch(jsSourceOrderPath, rebuildJSTask);
-    gulp.watch(`${src}/js/**/*.*`, copyJSFilesTask);
+  gulp.task('javascript', gulp.series('rebuildJS', () => {
+    gulp.watch(jsSourceOrderPath, gulp.series('rebuildJS'));
+    gulp.watch('src/js/**/*.*', gulp.series('copyJSFiles'));
   }));
 
   taskManager.registerTask('javascript', 'development');
   taskManager.registerTask('compileJSDist', 'production');
 };
+
+module.exports.sourceOrderPath = () => jsSourceOrderPath;
+module.exports.getSourceOrder = () => sourceOrder;

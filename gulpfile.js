@@ -31,9 +31,7 @@ const initAutoTasks = basedir => new Promise(resolveAutoTaskInitiated => {
         resolve(YAML.parse(rawConfigData.toString()));
       }
     });
-  });
-
-  configYAMLParsed.catch(reason => console.error(reason));
+  }).catch(reason => console.error(reason));
 
   const allTasksRequired = configYAMLParsed.then(config =>
     Promise.all(config.tasks.map(taskName => {
@@ -52,9 +50,7 @@ const initAutoTasks = basedir => new Promise(resolveAutoTaskInitiated => {
           }
         });
       });
-    })));
-
-  allTasksRequired.catch(reason => console.error(reason));
+    }))).catch(reason => console.error(reason));
 
   configYAMLParsed.then(config => allTasksRequired.then(requiredTasks => {
     // CHANGING DIRECTORY TO FILES DIRECTORY
@@ -102,9 +98,10 @@ const initAutoTasks = basedir => new Promise(resolveAutoTaskInitiated => {
       return cb();
     }));
 
+
     resolveAutoTaskInitiated();
-  }));
-});
+  }).catch(error => console.error(error)));
+}).catch(error => console.error(error));
 
 gulp.task('default', cb => {
   initAutoTasks(argv.basedir).then(() => {
