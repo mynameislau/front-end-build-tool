@@ -1,22 +1,3 @@
-
-
-
-
-
-/*****************************************************
-
-            TODO -> passer la recuperation de data en promise
-
-*****************************************************/
-
-
-
-
-
-
-
-
-
 'use strict';
 
 const gulp = require('gulp');
@@ -26,81 +7,100 @@ const browserSync = require('browser-sync');
 const del = require('del');
 const YAML = require('yamljs');
 const fs = require('fs');
-const javascript = require('./javascript.js');
 // const cache = require('gulp-cached');
 // const Emitter = require('events');
-var prettify = require('gulp-jsbeautifier');
+const prettify = require('gulp-jsbeautifier');
+const requireFromString = require('require-from-string');
 
 const beautifyOptions = { indent_size: 2, preserve_newlines: true, max_preserve_newlines: 0 };
 
-// const emitter = new Emitter();
-
-
 const templateDataPath = 'src/data/template-data.yaml';
 
-const handlebarsOptions = {
-  batch: ['src/templates/partials', 'src/templates/layouts'],
-  helpers: require('../src/templates/helpers/helpers.js')
-};
-
-let templateData;
 let jsSourceOrder;
 
+const templateDataFetched = () => new Promise((resolve, reject) => {
+  fs.readFile(templateDataPath, (error, data) => {
+    if (error) { console.error(error); }
+
+    const templateData = YAML.parse(data.toString());
+
+    if (jsSourceOrder) { templateData.jsSourceOrder = jsSourceOrder; }
+    resolve(templateData);
+  });
+}).catch(reason => console.error(reason));
+
+const helpersFetched = () => new Promise((resolve, reject) => {
+  fs.readFile('src/templates/helpers/helpers.js', (error, data) => {
+    if (error) { console.error(error); }
+
+    const handlebarsOptions = {
+      batch: ['src/templates/partials', 'src/templates/layouts'],
+      helpers: requireFromString(data.toString())
+    };
+    resolve(handlebarsOptions);
+  });
+});
+
 const init = ({ dev = 'dev', dist = 'dist', src = 'src', emitter = null }) => {
-  const buildTemplates = isDist => new Promise((resolve, reject) =>
-  {
+  const buildTemplates = isDist => new Promise((resolve, reject) => {
     const dir = isDist ? 'dist' : 'dev';
 
-    del(`${dir}/*.html`).then(() => whenTemplateData.then(() =>{
-      const stream = gulp.src('src/templates/pages/*.hbs')
-      .pipe(handlebars(templateData, handlebarsOptions))
-      .on('error', error =>
-      {
-        //console.error('templating error - ', error);
-        process.stderr.write(error + '\n');
-        stream.emit('end');
-        reject(error);
-      })
-      .pipe(rename(path => path.extname = '.html'))
-      .pipe(gulp.dest(`${dir}/`))
-      .on('error', error =>
-      {
-        console.error(error);
-        stream.emit('end');
-        reject(error);
-      })
-      .on('end', () => {
-        resolve();
-        browserSync.get(dir).reload();
-        emitter.emit('pagesCreated');
-      });
-    }));
+    del(`${dir}/*.html`).then(() =>
+      helpersFetched().then(hbsOptions =>
+        templateDataFetched().then(tplData => {
+          const stream = gulp.src('src/templates/pages/*.hbs')
+          .pipe(handlebars(tplData, hbsOptions))
+          .on('error', error => {
+            // console.error('templating error - ', error);
+            process.stderr.write(`${error}\n`);
+            stream.emit('end');
+            reject(error);
+          })
+          .pipe(rename(path => {
+            path.extname = '.html';
+          }))
+          .pipe(gulp.dest(`${dir}/`))
+          .on('error', error => {
+            console.error(error);
+            stream.emit('end');
+            reject(error);
+          })
+          .on('end', () => {
+            resolve();
+            browserSync.get(dir).reload();
+            emitter.emit('pagesCreated');
+          });
+        })
+        .catch(reason => console.error(reason))
+        )
+      .catch(reason => console.error(reason))
+      )
+    .catch(reason => console.error(reason));
   });
 
-  const whenTemplateData = new Promise((resolve, reject) => {
-    fs.readFile(templateDataPath, (error, data) => {
-      templateData = YAML.parse(data.toString());
-      if (jsSourceOrder) { templateData.jsSourceOrder = jsSourceOrder; }
-      resolve();
-    });
-  }).catch(reason => console.error(reason));
+  buildTemplates.displayName = 'buildTemplates';
 
-  gulp.task('setTemplateData', ['rebuildJS'], () =>
-  }));
-
-  gulp.task('templating', ['buildTemplates'], () => {
-    gulp.watch('src/templates/**/*.hbs', ['buildTemplates']);
-    gulp.watch(templateDataPath, ['buildTemplates']);
-  });
 
   gulp.task('buildTemplates', () => buildTemplates());
-  gulp.task('rebuildTemplates', () => buildTemplates());
-  gulp.task('buildTemplatesDist', ['setTemplateData'], () => buildTemplates(true));
+  gulp.task('buildTemplatesDist', () => buildTemplates(true));
+  // gulp.task('setTemplateData', ['rebuildJS'], () =>
+  // }));
+
+  const watchTemplateFiles = cb => {
+    gulp.watch('src/templates/**/*.hbs', gulp.series('buildTemplates'));
+    gulp.watch(templateDataPath, gulp.series('buildTemplates'));
+
+    return cb();
+  };
+
+  watchTemplateFiles.displayName = 'watchTemplateFiles';
+
+  gulp.task('templating', gulp.parallel('buildTemplates', watchTemplateFiles));
 
   emitter.on('JSRebuilt', sourceOrder => {
     jsSourceOrder = sourceOrder;
-    gulp.series()
-  })
+    gulp.series('buildTemplates')();
+  });
 };
 
 module.exports.register = taskManager => {
@@ -111,6 +111,6 @@ module.exports.register = taskManager => {
 
   init({ dev: dev, dist: dist, src: src, emitter: taskManager.emitter });
 
-  taskManager.registerTask('javascript', 'development');
-  taskManager.registerTask('compileJSDist', 'production');
+  taskManager.registerTask('templating', 'development');
+  taskManager.registerTask('buildTemplatesDist', 'production');
 };

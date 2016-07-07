@@ -21,6 +21,7 @@ module.exports = {
         )
         .map(task => task.taskName)
     });
+
     return taskManager;
   }
 };

@@ -38,7 +38,9 @@ const initAutoTasks = basedir => new Promise(resolveAutoTaskInitiated => {
       if (config.devDirectory) { taskManagerInst.dev = config.devDirectory; }
       if (config.distDirectory) { taskManagerInst.dist = config.distDirectory; }
 
-      const taskPath = path.basename(taskName) === taskName ? `./tasks/${taskName}.js` : `${path.join(basedir, taskName)}.js`;
+      const taskPath = path.basename(taskName) === taskName ?
+      `./tasks/${taskName}.js`
+      : `${path.join(basedir, taskName)}.js`;
 
       return new Promise((resolve, reject) => {
         fs.readFile(taskPath, (err, data) => {
@@ -76,17 +78,21 @@ const initAutoTasks = basedir => new Promise(resolveAutoTaskInitiated => {
     const buildPhase = gulp.parallel(...taskManagerInst.getTasks('development'));
     const postBuildPhase = gulp.parallel(...taskManagerInst.getTasks('development', 'postBuild'));
 
-    gulp.task('dev', gulp.parallel(gulp.series(buildPhase, postBuildPhase), cb => {
+    const startDevBrowserSync = cb => {
       console.log(browserSyncDevConfig);
       browserSync.get('dev').init(browserSyncDevConfig);
 
       return cb();
-    }));
+    };
+
+    startDevBrowserSync.displayName = 'startDevBrowserSync';
+
+    gulp.task('dev', gulp.parallel(gulp.series(buildPhase, postBuildPhase), startDevBrowserSync));
 
     const buildPhaseProd = gulp.parallel(...taskManagerInst.getTasks('production', 'build'));
     const postBuildPhaseProd = gulp.parallel(...taskManagerInst.getTasks('production', 'postBuild'));
 
-    gulp.task('dist', gulp.parallel(gulp.series(buildPhaseProd, postBuildPhaseProd), cb => {
+    const startDistBrowserSync = cb => {
       browserSync.get('dist').init({
         server:
         {
@@ -96,7 +102,11 @@ const initAutoTasks = basedir => new Promise(resolveAutoTaskInitiated => {
       });
 
       return cb();
-    }));
+    };
+
+    startDistBrowserSync.displayName = 'startDistBrowserSync';
+
+    gulp.task('dist', gulp.parallel(gulp.series(buildPhaseProd, postBuildPhaseProd), startDistBrowserSync));
 
     resolveAutoTaskInitiated();
   }).catch(error => console.error(error)));

@@ -124,22 +124,35 @@ const init = ({ dev = 'dev', src = 'src', dist = 'dist', emitter = null }) => {
 
   createJSFilesArray.displayName = 'createJSFilesArray';
 
-  const rebuildJS = gulp.series(createJSFilesArray, cb => {
+  const copyAndEmit = cb => {
     copyJSFiles().then(() => {
       if (emitter) { emitter.emit('JSRebuilt', sourceOrder); }
 
       return cb();
     });
-  });
+  };
+
+  copyAndEmit.displayName = 'copyAndEmit';
+
+  const rebuildJS = gulp.series(createJSFilesArray, copyAndEmit);
 
   rebuildJS.displayName = 'rebuildJS';
 
-  gulp.task('javascript', gulp.series(rebuildJS, () => {
-    gulp.watch(jsSourceOrderPath, rebuildJS);
-    gulp.watch(`${src}/js/**/*.*`, () => copyJSFiles());
-  }));
+  gulp.task('copyJSFilesDist', () => copyJSFiles(true));
+  gulp.task('copyJSFilesDev', () => copyJSFiles());
 
-  gulp.task('compileJSDist', gulp.series(createJSFilesArray, () => copyJSFiles(true)));
+  const watchJSFiles = cb => {
+    gulp.watch(jsSourceOrderPath, rebuildJS);
+    gulp.watch(`${src}/js/**/*.*`, gulp.series('copyJSFilesDev'));
+
+    return cb();
+  };
+
+  watchJSFiles.displayName = 'watchJSFiles';
+
+  gulp.task('javascript', gulp.series(rebuildJS, watchJSFiles));
+
+  gulp.task('compileJSDist', gulp.series(createJSFilesArray, 'copyJSFilesDist'));
 };
 
 module.exports.register = taskManager => {
