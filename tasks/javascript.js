@@ -36,7 +36,7 @@ const isExternal = entry =>
   || entry.src.startsWith('//');
 
 const isBundlable = entry =>
-  !isExternal(entry) && !entry.async && !entry.ie;
+  !isExternal(entry) && !entry.async && !entry.ie && !entry.preventBundling;
 
 const init = ({ dev = 'dev', src = 'src', dist = 'dist', emitter = null }) => {
   const copyJSFiles = isDist => new Promise(resolveCopy => {
@@ -58,7 +58,7 @@ const init = ({ dev = 'dev', src = 'src', dist = 'dist', emitter = null }) => {
         .on('error', error => console.error(error));
 
         const concatenated = entry.bundle ? stream.pipe(concat(entry.src)) : stream;
-        const uglified = dist ? concatenated.pipe(uglify()) : concatenated;
+        const uglified = isDist ? concatenated.pipe(uglify()) : concatenated;
 
         uglified.pipe(sourcemaps.write('./'))
         .pipe(gulp.dest(dest))
