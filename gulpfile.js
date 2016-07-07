@@ -10,18 +10,10 @@ const argv = require('yargs').argv;
 
 const taskManager = require('./tasks/taskManager');
 
-// const config = YAML.parse(fs.readFileSync().toString());
 
-
-// const tasks = config.tasks.map(task => {
-//   const taskPath = path.basename(task) === task ? `./tasks/${task}.js` : `${path.join(basedir, task)}.js`;
-//   return requireFromString(fs.readFileSync(taskPath).toString());
-// });
-
-const initAutoTasks = basedir => new Promise(resolveAutoTaskInitiated => {
+const initAutoTasks = (basedir = './') => new Promise(resolveAutoTaskInitiated => {
   const taskManagerInst = taskManager.init(basedir);
 
-  ////
   const configYAMLParsed = new Promise((resolve, reject) => {
     fs.readFile(path.join(basedir, '.buildtoolrc.yaml'), (err, rawConfigData) => {
       if (err) {
