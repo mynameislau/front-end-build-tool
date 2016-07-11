@@ -15,12 +15,6 @@ const jsSourceOrderPath = 'src/data/javascript_source_order.yaml';
 let sourceOrder = null;
 const useBundlingInDev = false;
 
-// const defaultObj = {
-//   sourceOrderPath: () => jsSourceOrderPath,
-//   getSourceOrder: () => sourceOrder,
-//   emitter: new EventEmitter()
-// };
-
 const getObjectEntries = obj =>
   Object.keys(obj).map(key =>
     [key, obj[key]]
@@ -39,8 +33,40 @@ const isExternal = entry =>
 const isBundlable = entry =>
   !isExternal(entry) && !entry.async && !entry.ie && !entry.preventBundling;
 
+const getSourceOrder = config => {
+  const source = {};
+
+  getObjectEntries(config).forEach(([groupName, groupEntries]) => {
+    source[groupName] = [];
+    const srcGroup = source[groupName];
+    let bundleNumber = 0;
+    let currentlyBundling = false;
+
+    groupEntries.forEach(currentEntry => {
+      if (useBundlingInDev && isBundlable(currentEntry)) {
+        // if not yet created, create bundle
+        if (!currentlyBundling) {
+          currentlyBundling = true;
+          bundleNumber += 1;
+          srcGroup.push({ src: `js/bundles/${groupName}-bundle-${bundleNumber}.js`, bundle: [] });
+        }
+        // add file to bundle
+        srcGroup[srcGroup.length - 1].bundle.push(Object.assign({}, currentEntry));
+      }
+      // if not bundlable
+      else
+      {
+        currentlyBundling = false;
+        srcGroup.push(Object.assign({}, currentEntry));
+      }
+    });
+  });
+
+  return source;
+};
+
 const init = ({ dev = 'dev', src = 'src', dist = 'dist', emitter = null }) => {
-  const copyJSFiles = isDist => new Promise(resolveCopy => {
+  const copyJSFiles = (sourceOrder, isDist) => new Promise(resolveCopy => {
     const dir = isDist ? dist : dev;
 
     del(`${dir}/js/*`).then(() => {
@@ -69,52 +95,20 @@ const init = ({ dev = 'dev', src = 'src', dist = 'dist', emitter = null }) => {
           console.error(error);
           reject(error);
         });
-      }))).then(resolveCopy);
+      })))
+      .then(resolveCopy(sourceOrder));
     })
     .catch(error => console.error(error));
   });
 
-  const getSourceOrder = config => {
-    const source = {};
-
-    getObjectEntries(config).forEach(([groupName, groupEntries]) => {
-      source[groupName] = [];
-      const srcGroup = source[groupName];
-      let bundleNumber = 0;
-      let currentlyBundling = false;
-
-      groupEntries.forEach(currentEntry => {
-        if (useBundlingInDev && isBundlable(currentEntry)) {
-          // if not yet created, create bundle
-          if (!currentlyBundling) {
-            currentlyBundling = true;
-            bundleNumber += 1;
-            srcGroup.push({ src: `js/bundles/${groupName}-bundle-${bundleNumber}.js`, bundle: [] });
-          }
-          // add file to bundle
-          srcGroup[srcGroup.length - 1].bundle.push(Object.assign({}, currentEntry));
-        }
-        // if not bundlable
-        else
-        {
-          currentlyBundling = false;
-          srcGroup.push(Object.assign({}, currentEntry));
-        }
-      });
-    });
-
-    return source;
-  };
-
-  const createJSFilesArray = () => new Promise((resolve, reject) => {
+  const getJSConfig = () => new Promise((resolve, reject) => {
     fs.readFile(jsSourceOrderPath, (err, data) => {
       if (err) {
         console.error(err);
       }
 
       try {
-        sourceOrder = getSourceOrder(YAML.parse(data.toString()));
-        resolve();
+        resolve(YAML.parse(data.toString()));
       }
       catch (error)
       {
@@ -125,7 +119,7 @@ const init = ({ dev = 'dev', src = 'src', dist = 'dist', emitter = null }) => {
 
   createJSFilesArray.displayName = 'createJSFilesArray';
 
-  const copyAndEmit = cb => {
+  const copyAndEmit = sourceOrder => {
     copyJSFiles().then(() => {
       if (emitter) { emitter.emit('JSRebuilt', sourceOrder); }
 
@@ -135,7 +129,11 @@ const init = ({ dev = 'dev', src = 'src', dist = 'dist', emitter = null }) => {
 
   copyAndEmit.displayName = 'copyAndEmit';
 
-  const rebuildJS = gulp.series(createJSFilesArray, copyAndEmit);
+  const rebuildJS = getJSConfig()
+  .then(config => getSourceOrder(config))
+  .then(sourceOrder => copyJSFiles(sourceOrder))
+  .then(sourceOrder)
+  //  copyAndEmit().then(() =>//gulp.series(createJSFilesArray, copyAndEmit);
 
   rebuildJS.displayName = 'rebuildJS';
 
@@ -153,7 +151,7 @@ const init = ({ dev = 'dev', src = 'src', dist = 'dist', emitter = null }) => {
 
   gulp.task('javascript', gulp.series(rebuildJS, watchJSFiles));
 
-  gulp.task('compileJSDist', gulp.series(createJSFilesArray, 'copyJSFilesDist'));
+  gulp.task('compileJSDist', gulp.series(rebuildJS));
 };
 
 module.exports.register = taskManager => {
