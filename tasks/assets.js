@@ -6,7 +6,7 @@ const browserSync = require('browser-sync');
 // const vinylPaths = require('vinyl-paths');
 // const changed = require('gulp-changed');
 
-const dirs = ['assets', 'fonts', 'img'];
+const dirs = ['assets', 'font', 'img', 'bower_components'];
 
 
 module.exports.register = (taskManager) => {

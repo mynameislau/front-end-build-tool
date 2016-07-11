@@ -13,6 +13,7 @@ const YAML = require('yamljs');
 
 const jsSourceOrderPath = 'src/data/javascript_source_order.yaml';
 let sourceOrder = null;
+const useBundlingInDev = false;
 
 // const defaultObj = {
 //   sourceOrderPath: () => jsSourceOrderPath,
@@ -83,7 +84,7 @@ const init = ({ dev = 'dev', src = 'src', dist = 'dist', emitter = null }) => {
       let currentlyBundling = false;
 
       groupEntries.forEach(currentEntry => {
-        if (isBundlable(currentEntry)) {
+        if (useBundlingInDev && isBundlable(currentEntry)) {
           // if not yet created, create bundle
           if (!currentlyBundling) {
             currentlyBundling = true;

@@ -19,10 +19,9 @@ module.exports.register = taskManager => {
     const dest = isDist ? `${dist}/css` : `${dev}/css`;
 
     del(dest).then(() => {
-
       const stream = gulp.src(glob)
       .pipe(sourcemaps.init())
-      .pipe(sass({ outputStyle: 'expanded' }))
+      .pipe(sass({ outputStyle: 'expanded', includePaths: [`${src}/bower_components/`] }))
       .on('error', error => {
         sass.logError.call(stream, error);
         beep(4);
@@ -34,7 +33,8 @@ module.exports.register = taskManager => {
       .pipe(gulp.dest(dest))
       .on('end', cb)
       .pipe(browserSync.get(isDist ? 'dist' : 'dev').stream({ match: '**/*.css' }));
-    }).catch(error => console.error('compile sass error: ', error));
+    })
+    .catch(error => console.error('compile sass error: ', error));
   };
 
   gulp.task('compileSassDist', cb => {
@@ -46,8 +46,9 @@ module.exports.register = taskManager => {
   });
 
   gulp.task('css', gulp.parallel('compileSass', cb => {
-    cb();
     gulp.watch([`${src}/scss/**/*.scss`], gulp.series('compileSass'));
+
+    return cb();
   }));
 
   taskManager.registerTask('css', 'development');
